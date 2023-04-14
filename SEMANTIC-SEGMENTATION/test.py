@@ -50,6 +50,7 @@ def visualize_result(data, pred, cfg):
     img_name = info.split('/')[-1]
     Image.fromarray(im_vis).save(
         os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    im_vis.show()
 
 
 def test(segmentation_module, loader, gpu):

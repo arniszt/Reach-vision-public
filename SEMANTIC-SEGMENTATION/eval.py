@@ -36,7 +36,7 @@ def visualize_result(data, pred, dir_result):
 
     img_name = info.split('/')[-1]
     Image.fromarray(im_vis).save(os.path.join(dir_result, img_name.replace('.jpg', '.png')))
-
+    im_vis.show()
 
 def evaluate(segmentation_module, loader, cfg, gpu):
     acc_meter = AverageMeter()

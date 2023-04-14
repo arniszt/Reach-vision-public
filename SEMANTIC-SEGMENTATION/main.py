@@ -2,8 +2,20 @@ import os, csv, torch, numpy, scipy.io, PIL.Image, torchvision.transforms
 # Our libs
 from mit_semseg.models import ModelBuilder, SegmentationModule
 from mit_semseg.utils import colorEncode
-
+import cv2
+from PIL import Image
+import numpy as np
 #2.136.142.197/32
+
+
+
+# SSH connection to remote machine
+
+
+
+
+
+
 
 '''
 2.136.142.197/32
@@ -23,6 +35,8 @@ git clone https://github.com/arniszt/my-reach-vision/
 
 '''
 
+
+
 colors = scipy.io.loadmat('data/color150.mat')['colors']
 names = {}
 with open('data/object150_info.csv') as f:
@@ -31,19 +45,30 @@ with open('data/object150_info.csv') as f:
     for row in reader:
         names[int(row[0])] = row[5].split(";")[0]
 
-def visualize_result(img, pred, index=None):
+image_index = 0
+
+image_name = 'restaurant.png'
+
+def visualize_result(img, pred, name, index=None):
     # filter prediction class if requested
     if index is not None:
         pred = pred.copy()
         pred[pred != index] = -1
         print(f'{names[index+1]}:')
-        
+    global image_index
     # colorize prediction
     pred_color = colorEncode(pred, colors).astype(numpy.uint8)
 
     # aggregate images and save
     im_vis = numpy.concatenate((img, pred_color), axis=1)
     #display(PIL.Image.fromarray(im_vis))
+    image=Image.fromarray(im_vis)
+
+    image.save(image_name +"."+ str(image_index)+ "-"+ name+ ".jpg")
+    
+    image_index = image_index+1
+    #time.sleep(5)
+
 
 # Network Builders
 net_encoder = ModelBuilder.build_encoder(
@@ -68,23 +93,53 @@ pil_to_tensor = torchvision.transforms.Compose([
         mean=[0.485, 0.456, 0.406], # These are RGB mean+std values
         std=[0.229, 0.224, 0.225])  # across a large photo dataset.
 ])
-pil_image = PIL.Image.open('ADE_val_00001519.jpg').convert('RGB')
-img_original = numpy.array(pil_image)
-img_data = pil_to_tensor(pil_image)
+
+
+#OPEN IMAGE
+pil_image = PIL.Image.open(image_name).convert('RGB')
+#RESIZE IMAGE
+res_x, res_y = pil_image.size
+if res_x > 1000:
+    res_y =int((res_y * 1000)/res_x)
+    res_x =int(1000)
+img = pil_image.resize((res_x, res_y), resample=Image.BOX)
+img_array = numpy.array(img)
+
+#IMAGE TO TENSOR
+img_data = pil_to_tensor(img)
 singleton_batch = {'img_data': img_data[None].cuda()}
 output_size = img_data.shape[1:]
 
+#COMPUTE THE SCORES
 with torch.no_grad():
-    scores = segmentation_module(singleton_batch, segSize=output_size)
-    
-# Get the predicted scores for each pixel
+    o_s = torch.Size((res_y,res_x))
+    scores = segmentation_module(singleton_batch, segSize=o_s)
+
+
 _, pred = torch.max(scores, dim=1)
 pred = pred.cpu()[0].numpy()
-visualize_result(img_original, pred)
 
+#BUILD THE DICTIONARY: 'NAME' -> 'SCORE'
+D = {}
+for i in range(len(names)):
+    D[names[i+1]] = np.count_nonzero(pred.flatten() == i)
+
+#SORT THE DICTIONARY AND PICK THE HIGHEST ENTRIES IN SCORE
 predicted_classes = numpy.bincount(pred.flatten()).argsort()[::-1]
+
+#INIT RESULT AND INDEX
 result = []
-for c in predicted_classes[:15]:
-    #visualize_result(img_original, pred, c)
-    result.append(names[int(c)+1])
+i = 0
+
+#print("PREDICTED CLASSES")
+#for c in predicted_classes:
+#    print("class -> ", names[int(c)+1], " has a SCORE OF: ", D[names[int(c)+1]])
+
+c3 = predicted_classes[:10][2]
+for c in predicted_classes[:10]:
+    scorec = D[names[int(c)+1]]
+    if scorec > (D[names[int(c3)+1]]/5) or (i < 4 and scorec > 100):
+       visualize_result(img, pred, names[int(c)+1], c)
+       result.append(names[int(c)+1])
+    i = i+1
 print(result)
